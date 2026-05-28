@@ -9,8 +9,6 @@ Status: Draft
 - [ ] Rejects invalid time values.
 - [ ] Rejects weekly schedules with no weekdays.
 - [ ] Rejects script paths outside `APP_SCRIPT_DIR`.
-- [ ] Rejects recipe paths outside `APP_RECIPE_DIR`.
-- [ ] Rejects selected recipes whose language differs from the job runtime.
 
 ## Schedule
 
@@ -32,11 +30,11 @@ Status: Draft
 ## Runner
 
 - [ ] Bash job receives only the explicit environment allowlist plus `JOB_*`.
-- [ ] Selected Bash recipes are sourced before the job script.
 - [ ] Job timeout terminates the process.
 - [ ] stdout and stderr are captured.
 - [ ] exit code and status are recorded.
 - [ ] Job working directory is controlled by the app.
+- [ ] Test runs set `JOB_RUN_REASON=test` and `JOB_TEST_RUN=true`.
 
 ## Logs
 
@@ -50,8 +48,9 @@ Status: Draft
 - [ ] UI is implemented only after core unit-tested logic exists.
 - [ ] UI can create and edit daily jobs.
 - [ ] UI can create and edit weekly jobs with multiple weekdays.
-- [ ] UI can select runtime recipes.
+- [ ] UI can edit full job script content.
+- [ ] UI can test-run draft job values before saving.
+- [ ] UI shows test-run output.
 - [ ] UI separates global env from job env.
 - [ ] UI shows next run time.
 - [ ] UI shows recent run history and log detail.
-

@@ -4,8 +4,8 @@ Status: Draft
 
 ## Goal
 
-Support scheduled script execution safely enough for a single-container Synology
-deployment, while leaving room for future runtimes beyond Bash.
+Support scheduled execution of user-provided Bash scripts in a single-container
+Synology deployment, while leaving room for future runtimes beyond Bash.
 
 ## Runtime Model
 
@@ -13,21 +13,46 @@ Initial runtime:
 
 - `language: bash`
 - script stored under `APP_SCRIPT_DIR`
-- selected recipes loaded before the job script
 - timeout required
 
-Future runtimes should be represented with the same shape:
+Runtime config shape:
 
 ```json
 {
   "runtime": {
     "language": "bash",
     "script": "scripts/jobs/weekday-report.sh",
-    "recipes": ["github-actions"],
     "timeout_seconds": 60
   }
 }
 ```
+
+The web UI should accept full script content. On save, the app writes that
+content to the configured script path under `APP_SCRIPT_DIR` and saves metadata
+in `config.json`.
+
+## Test Run Model
+
+New and edited jobs should support a test run before saving.
+
+Rules:
+
+- Test run uses the current form values and script content.
+- Test run does not save the job config.
+- Test run writes a temporary script under `APP_SCRIPT_DIR`.
+- Test run captures stdout, stderr, status, and exit code.
+- Test run output is shown directly in the UI.
+- Test run entries may be written to the run log index, marked as test runs.
+
+The runner should set:
+
+- `JOB_RUN_REASON=test` for test runs.
+- `JOB_TEST_RUN=true` for test runs.
+
+Scheduled or manual saved-job runs should set:
+
+- `JOB_RUN_REASON=scheduled` or `manual`.
+- `JOB_TEST_RUN=false`.
 
 ## Environment Model
 
@@ -74,35 +99,6 @@ Rules:
   clear error.
 - Real token values must not be stored in config, scripts, docs, or logs.
 
-## Recipe Model
-
-Recipes are reusable runtime-specific helpers.
-
-```json
-{
-  "recipes": [
-    {
-      "id": "github-actions",
-      "language": "bash",
-      "path": "recipes/bash/github-actions.sh"
-    }
-  ]
-}
-```
-
-Rules:
-
-- Jobs select recipes by ID.
-- Selected recipe language must match the job runtime language.
-- Bash recipes are sourced before the job script in listed order.
-- Bash recipes should define functions and constants only; they should not run
-  work at source time.
-
-Initial built-in recipe candidates:
-
-- `http-curl`
-- `github-actions`
-
 ## Bash Job Contract
 
 The runner should provide these `JOB_*` variables:
@@ -114,6 +110,8 @@ The runner should provide these `JOB_*` variables:
 - `JOB_CONFIG_PATH`
 - `JOB_LOG_DIR`
 - `JOB_SCRIPT_PATH`
+- `JOB_RUN_REASON`
+- `JOB_TEST_RUN`
 
 Example script shape:
 

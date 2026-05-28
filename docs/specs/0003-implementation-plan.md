@@ -19,7 +19,7 @@ runner, and log behavior.
    - load config
    - validate config
    - atomic save
-   - tests for invalid schedules, paths, env names, recipe references
+   - tests for invalid schedules, paths, and env names
 
 3. Schedule package
    - daily next-run calculation
@@ -33,10 +33,10 @@ runner, and log behavior.
    - reject invalid env names
    - tests for override and missing secret behavior
 
-5. Runtime and recipe package
+5. Runtime and script package
    - resolve script path
-   - resolve selected recipes
    - validate language matches
+   - persist job script content
    - generate Bash wrapper command
 
 6. Runner package
@@ -67,7 +67,7 @@ runner, and log behavior.
 10. Web UI
     - compact operational screens
     - daily/weekly controls
-    - runtime, recipe, env controls
+    - script editor, test run, runtime, env controls
     - log viewer
 
 11. Docker and Synology docs
@@ -83,7 +83,6 @@ Do not start UI implementation until these packages have focused tests:
 - config
 - schedule
 - env
-- runtime/recipe
+- runtime/script
 - runner
 - log store
-

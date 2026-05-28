@@ -15,7 +15,7 @@ criteria belong under `docs/specs/` and `docs/acceptance/`.
 - Support daily and weekly schedules first.
 - Initial job runtime is Bash. Leave room for future runtimes through explicit
   runtime metadata.
-- Jobs may use reusable runtime-specific library recipes selected per job.
+- Each job owns one user-provided script stored under `APP_SCRIPT_DIR`.
 - Separate global environment from job-specific environment.
 - Never store real token values in committed files, examples, logs, or docs.
 
@@ -37,7 +37,6 @@ Recommended environment variables:
 - `APP_CONFIG_PATH`: config file path. Default: `/data/config.json`.
 - `APP_LOG_DIR`: job log directory. Default: `/data/logs`.
 - `APP_SCRIPT_DIR`: job script directory. Default: `/data/scripts/jobs`.
-- `APP_RECIPE_DIR`: library recipe directory. Default: `/data/recipes`.
 - `APP_TIMEZONE`: scheduler timezone. Default: `Asia/Seoul`.
 
 Recommended mounted layout:
@@ -47,7 +46,6 @@ Recommended mounted layout:
   config.json
   logs/
   scripts/jobs/
-  recipes/
 ```
 
 Environment variables should provide locations, defaults, and secret values.
@@ -78,7 +76,7 @@ Build logic before UI:
 1. Config model, validation, and atomic save.
 2. Daily/weekly next-run calculation.
 3. Global/job environment merge and secret-name validation.
-4. Runtime and recipe resolution.
+4. Runtime script resolution and script file persistence.
 5. Job runner, timeouts, log files, and run index.
 6. Scheduler integration.
 7. HTTP API.
@@ -92,8 +90,8 @@ Prefer focused unit tests for each logic layer before wiring it into the UI.
 - Keep changes scoped to the current implementation step.
 - Use Go unless a later spec records a different decision.
 - Prefer the standard library where it keeps the code clear.
-- Add tests around schedule calculation, config validation, env merge, recipe
-  resolution, runner behavior, and log indexing.
+- Add tests around schedule calculation, config validation, env merge, script
+  persistence, runner behavior, and log indexing.
 - Use atomic writes for config and index updates.
 - When UI work starts, keep it compact and operational rather than marketing
   oriented.
