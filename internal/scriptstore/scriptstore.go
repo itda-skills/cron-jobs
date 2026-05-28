@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -101,6 +102,7 @@ func writeFile(path string, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	content = normalizeLineEndings(content)
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".script-*.tmp")
 	if err != nil {
 		return err
@@ -123,4 +125,9 @@ func writeFile(path string, content string) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func normalizeLineEndings(content string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	return strings.ReplaceAll(content, "\r", "\n")
 }

@@ -46,6 +46,24 @@ func TestWriteTestCreatesTemporaryScript(t *testing.T) {
 	}
 }
 
+func TestWriteTestNormalizesWindowsLineEndings(t *testing.T) {
+	dataDir := t.TempDir()
+	store := Store{DataDir: dataDir, ScriptDir: filepath.Join(dataDir, "scripts", "jobs")}
+	rel, cleanup, err := store.WriteTest("draft", "#!/usr/bin/env bash\r\nset -euo pipefail\r\necho test\r\n", time.Date(2026, 5, 28, 18, 10, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("WriteTest() error = %v", err)
+	}
+	defer cleanup()
+	content, err := store.ReadConfigured(rel)
+	if err != nil {
+		t.Fatalf("ReadConfigured() error = %v", err)
+	}
+	want := "#!/usr/bin/env bash\nset -euo pipefail\necho test\n"
+	if content != want {
+		t.Fatalf("content = %q, want %q", content, want)
+	}
+}
+
 func TestWriteJobRejectsUnsafeID(t *testing.T) {
 	store := Store{DataDir: t.TempDir(), ScriptDir: t.TempDir()}
 	if _, err := store.WriteJob("../bad", "echo bad\n"); err == nil {

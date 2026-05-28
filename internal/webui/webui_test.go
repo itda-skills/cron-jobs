@@ -65,7 +65,7 @@ func TestCreateJobRunTestShowsOutputWithoutSaving(t *testing.T) {
 	service := testService(t)
 	handler := Server{Service: service}.Routes(httpapi.Server{Service: service}.Routes())
 
-	form := jobFormValues("Draft", "echo ui-test:$JOB_TEST_RUN\n")
+	form := jobFormValues("Draft", "#!/usr/bin/env bash\r\nset -euo pipefail\r\necho ui-test:$JOB_TEST_RUN\r\n")
 	form.Set("action", "test")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(form.Encode()))
