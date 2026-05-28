@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "timezone": "Asia/Seoul",
+  "env": {
+    "global": {
+      "plain": {
+        "BRANCH": "main"
+      },
+      "inherit": [
+        "GITHUB_PAT"
+      ]
+    }
+  },
+  "recipes": [
+    {
+      "id": "github-actions",
+      "language": "bash",
+      "path": "recipes/bash/github-actions.sh",
+      "description": "Dispatch a GitHub Actions workflow"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "weekday-report",
+      "name": "Weekday report",
+      "enabled": true,
+      "env": {
+        "plain": {
+          "OWNER": "itda-skills",
+          "REPO": "rs-golden-queens",
+          "WORKFLOW_FILE": "flow-kr.yml",
+          "WORKFLOW_LABEL": "Korean market trend push"
+        }
+      },
+      "runtime": {
+        "language": "bash",
+        "script": "scripts/jobs/github-workflow-dispatch.sh",
+        "recipes": [
+          "github-actions"
+        ],
+        "timeout_seconds": 60
+      },
+      "schedule": {
+        "type": "weekly",
+        "weekdays": [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday"
+        ],
+        "time": "18:10"
+      }
+    }
+  ]
+}
+
