@@ -14,6 +14,7 @@ type PlannedJob struct {
 	ID           string
 	Name         string
 	ScheduleType string
+	Schedule     schedule.Spec
 	NextRun      time.Time
 	Runtime      jobruntime.Resolved
 	Env          map[string]string
@@ -54,6 +55,7 @@ func BuildPlan(cfg config.Config, paths config.Paths, now time.Time, lookup func
 			ID:           job.ID,
 			Name:         job.Name,
 			ScheduleType: job.Schedule.Type,
+			Schedule:     job.Schedule,
 			NextRun:      nextRun,
 			Runtime:      resolved,
 			Env:          env,

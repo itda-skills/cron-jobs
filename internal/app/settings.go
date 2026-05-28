@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+const ShutdownTimeout = 10 * time.Second
 
 type Settings struct {
 	Addr       string
