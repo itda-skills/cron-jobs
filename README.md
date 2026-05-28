@@ -9,6 +9,7 @@ jobs. The first runtime is Bash, with one user-provided script per job.
 - Weekly schedules at a configured `HH:MM` on selected weekdays.
 - Bash job scripts stored under the mounted data directory.
 - Script editor and draft test-run before saving.
+- Generated job IDs and managed script file paths.
 - Global environment and job-specific environment.
 - Secret values inherited from container environment variables by name.
 - Run logs and `logs/index.jsonl`.
@@ -43,8 +44,10 @@ data/
     jobs/
 ```
 
-The config stores non-secret values and inherited environment variable names.
-Do not put token values in `config.json`, scripts, logs, or docs.
+The web UI generates job IDs and manages script file paths automatically. The
+config stores those internal references along with non-secret values and
+inherited environment variable names. Do not put token values in `config.json`,
+scripts, logs, or docs.
 
 ## GitHub Actions Dispatch Example
 

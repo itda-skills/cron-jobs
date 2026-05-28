@@ -5,6 +5,7 @@ Status: Draft
 ## Config
 
 - [ ] Loads a valid config from `APP_CONFIG_PATH`.
+- [ ] Creates new web UI jobs with generated UUIDv7-style IDs.
 - [ ] Rejects duplicate job IDs.
 - [ ] Rejects invalid time values.
 - [ ] Rejects weekly schedules with no weekdays.
@@ -51,6 +52,7 @@ Status: Draft
 - [ ] UI can edit full job script content.
 - [ ] UI can test-run draft job values before saving.
 - [ ] UI shows test-run output.
+- [ ] UI does not ask for app-managed job IDs or saved script paths.
 - [ ] UI separates global env from job env.
 - [ ] UI shows next run time.
 - [ ] UI shows recent run history and log detail.

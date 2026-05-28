@@ -12,7 +12,7 @@ Synology deployment, while leaving room for future runtimes beyond Bash.
 Initial runtime:
 
 - `language: bash`
-- script stored under `APP_SCRIPT_DIR`
+- app-managed script stored under `APP_SCRIPT_DIR`
 - timeout required
 
 Runtime config shape:
@@ -27,9 +27,9 @@ Runtime config shape:
 }
 ```
 
-The web UI should accept full script content. On save, the app writes that
-content to the configured script path under `APP_SCRIPT_DIR` and saves metadata
-in `config.json`.
+The web UI should accept full script content. On save, the app generates the job
+ID when needed, writes the content to an app-managed script path under
+`APP_SCRIPT_DIR`, and saves metadata in `config.json`.
 
 ## Test Run Model
 

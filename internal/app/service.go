@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/itda-skills/cron-jobs/internal/config"
+	"github.com/itda-skills/cron-jobs/internal/idgen"
 	"github.com/itda-skills/cron-jobs/internal/logstore"
 	"github.com/itda-skills/cron-jobs/internal/runner"
 	"github.com/itda-skills/cron-jobs/internal/schedule"
@@ -168,6 +169,13 @@ func (s *Service) RunJobNow(ctx context.Context, id string) (logstore.Entry, err
 
 func (s *Service) TestJob(ctx context.Context, job config.Job, scriptContent string) (logstore.Entry, string, error) {
 	now := time.Now()
+	if job.ID == "" {
+		id, err := idgen.NewUUIDv7At(now)
+		if err != nil {
+			return logstore.Entry{}, "", err
+		}
+		job.ID = id
+	}
 	relScript, cleanup, err := s.scripts.WriteTest(job.ID, scriptContent, now)
 	if err != nil {
 		return logstore.Entry{}, "", err

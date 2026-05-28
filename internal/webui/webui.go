@@ -12,6 +12,7 @@ import (
 
 	"github.com/itda-skills/cron-jobs/internal/app"
 	"github.com/itda-skills/cron-jobs/internal/config"
+	"github.com/itda-skills/cron-jobs/internal/idgen"
 	"github.com/itda-skills/cron-jobs/internal/jobenv"
 	"github.com/itda-skills/cron-jobs/internal/jobruntime"
 	"github.com/itda-skills/cron-jobs/internal/schedule"
@@ -282,9 +283,15 @@ func parseJobForm(r *http.Request, existingID string) (config.Job, string, error
 	if err := r.ParseForm(); err != nil {
 		return config.Job{}, "", err
 	}
-	id := strings.TrimSpace(r.FormValue("id"))
+	var id string
 	if existingID != "" {
 		id = existingID
+	} else {
+		generated, err := idgen.NewUUIDv7()
+		if err != nil {
+			return config.Job{}, r.FormValue("script_content"), err
+		}
+		id = generated
 	}
 	timeout, err := strconv.Atoi(strings.TrimSpace(r.FormValue("timeout_seconds")))
 	if err != nil {
@@ -475,7 +482,7 @@ const dashboardTemplate = `
       <tbody>
       {{range .Jobs}}
         <tr>
-          <td><a href="/jobs/{{.ID}}/edit">{{.Name}}</a><br><span class="muted">{{.ID}}</span></td>
+          <td><a href="/jobs/{{.ID}}/edit">{{.Name}}</a></td>
           <td>{{.ScheduleType}}</td>
           <td>{{if .NextRun.IsZero}}-{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
           <td>{{if .Running}}Running{{else if .Enabled}}Enabled{{else}}Disabled{{end}}</td>
@@ -534,10 +541,6 @@ const jobFormTemplate = `
   <form method="post" action="{{.FormAction}}">
     <div class="fields">
       <div>
-        <label>ID</label>
-        <input name="id" value="{{.FormJob.ID}}" {{if .FormJob.ID}}readonly{{end}}>
-      </div>
-      <div>
         <label>Name</label>
         <input name="name" value="{{.FormJob.Name}}">
       </div>
@@ -563,10 +566,6 @@ const jobFormTemplate = `
       <div>
         <label>Timeout Seconds</label>
         <input name="timeout_seconds" value="{{.FormJob.Runtime.TimeoutSeconds}}">
-      </div>
-      <div>
-        <label>Saved Script Path</label>
-        <input value="{{.FormJob.Runtime.Script}}" readonly placeholder="generated on save">
       </div>
       <div class="wide">
         <label>Script Content</label>

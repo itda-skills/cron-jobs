@@ -16,6 +16,7 @@ criteria belong under `docs/specs/` and `docs/acceptance/`.
 - Initial job runtime is Bash. Leave room for future runtimes through explicit
   runtime metadata.
 - Each job owns one user-provided script stored under `APP_SCRIPT_DIR`.
+- Treat job IDs and script file paths as app-managed metadata in the user UI.
 - Separate global environment from job-specific environment.
 - Never store real token values in committed files, examples, logs, or docs.
 

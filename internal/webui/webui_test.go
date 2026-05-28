@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -52,13 +53,19 @@ func TestNewJobFormRenders(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Script Content") {
 		t.Fatalf("new job form missing script editor")
 	}
+	if strings.Contains(rec.Body.String(), "<label>ID</label>") {
+		t.Fatalf("new job form exposes internal ID field")
+	}
+	if strings.Contains(rec.Body.String(), "Saved Script Path") {
+		t.Fatalf("new job form exposes internal script path field")
+	}
 }
 
 func TestCreateJobRunTestShowsOutputWithoutSaving(t *testing.T) {
 	service := testService(t)
 	handler := Server{Service: service}.Routes(httpapi.Server{Service: service}.Routes())
 
-	form := jobFormValues("draft", "Draft", "echo ui-test:$JOB_TEST_RUN\n")
+	form := jobFormValues("Draft", "echo ui-test:$JOB_TEST_RUN\n")
 	form.Set("action", "test")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(form.Encode()))
@@ -72,7 +79,7 @@ func TestCreateJobRunTestShowsOutputWithoutSaving(t *testing.T) {
 	if !strings.Contains(body, "ui-test:true") {
 		t.Fatalf("test output not rendered: %s", body)
 	}
-	if _, ok := findJob(service.Config(), "draft"); ok {
+	if _, ok := findJobByName(service.Config(), "Draft"); ok {
 		t.Fatalf("draft job was saved during test run")
 	}
 }
@@ -81,7 +88,7 @@ func TestCreateJobSavesScriptAndConfig(t *testing.T) {
 	service := testService(t)
 	handler := Server{Service: service}.Routes(httpapi.Server{Service: service}.Routes())
 
-	form := jobFormValues("saved", "Saved", "echo saved\n")
+	form := jobFormValues("Saved", "echo saved\n")
 	form.Set("action", "save")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(form.Encode()))
@@ -91,9 +98,12 @@ func TestCreateJobSavesScriptAndConfig(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	job, ok := findJob(service.Config(), "saved")
+	job, ok := findJobByName(service.Config(), "Saved")
 	if !ok {
 		t.Fatalf("saved job not found")
+	}
+	if !uuid7Pattern.MatchString(job.ID) {
+		t.Fatalf("saved job id = %q, want generated UUIDv7", job.ID)
 	}
 	content, err := service.ReadJobScript(job)
 	if err != nil {
@@ -104,9 +114,10 @@ func TestCreateJobSavesScriptAndConfig(t *testing.T) {
 	}
 }
 
-func jobFormValues(id string, name string, script string) url.Values {
+var uuid7Pattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+func jobFormValues(name string, script string) url.Values {
 	form := url.Values{}
-	form.Set("id", id)
 	form.Set("name", name)
 	form.Set("schedule_type", "daily")
 	form.Set("time", "18:10")
@@ -114,6 +125,15 @@ func jobFormValues(id string, name string, script string) url.Values {
 	form.Set("script_content", script)
 	form.Set("enabled", "on")
 	return form
+}
+
+func findJobByName(cfg config.Config, name string) (config.Job, bool) {
+	for _, job := range cfg.Jobs {
+		if job.Name == name {
+			return job, true
+		}
+	}
+	return config.Job{}, false
 }
 
 func testService(t *testing.T) *app.Service {
