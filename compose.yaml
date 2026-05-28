@@ -10,7 +10,6 @@ services:
       APP_CONFIG_PATH: "/data/config.json"
       APP_LOG_DIR: "/data/logs"
       APP_SCRIPT_DIR: "/data/scripts/jobs"
-      APP_RECIPE_DIR: "/data/recipes"
       APP_TIMEZONE: "Asia/Seoul"
       GITHUB_PAT: "${GITHUB_PAT}"
     volumes:
@@ -23,4 +22,3 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-

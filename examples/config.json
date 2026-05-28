@@ -11,14 +11,6 @@
       ]
     }
   },
-  "recipes": [
-    {
-      "id": "github-actions",
-      "language": "bash",
-      "path": "recipes/bash/github-actions.sh",
-      "description": "Dispatch a GitHub Actions workflow"
-    }
-  ],
   "jobs": [
     {
       "id": "weekday-report",
@@ -35,9 +27,6 @@
       "runtime": {
         "language": "bash",
         "script": "scripts/jobs/github-workflow-dispatch.sh",
-        "recipes": [
-          "github-actions"
-        ],
         "timeout_seconds": 60
       },
       "schedule": {
@@ -54,4 +43,3 @@
     }
   ]
 }
-

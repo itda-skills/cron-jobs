@@ -1,14 +1,14 @@
 # Cron Jobs
 
 A small single-container web scheduler for running daily or weekly automation
-jobs. The first runtime is Bash, with reusable per-job library recipes.
+jobs. The first runtime is Bash, with one user-provided script per job.
 
 ## Current Capabilities
 
 - Daily schedules at a configured `HH:MM`.
 - Weekly schedules at a configured `HH:MM` on selected weekdays.
 - Bash job scripts stored under the mounted data directory.
-- Runtime recipes selected per job.
+- Script editor and draft test-run before saving.
 - Global environment and job-specific environment.
 - Secret values inherited from container environment variables by name.
 - Run logs and `logs/index.jsonl`.
@@ -30,7 +30,6 @@ APP_DATA_DIR="$PWD/data" \
 APP_CONFIG_PATH="$PWD/data/config.json" \
 APP_LOG_DIR="$PWD/data/logs" \
 APP_SCRIPT_DIR="$PWD/data/scripts/jobs" \
-APP_RECIPE_DIR="$PWD/data/recipes" \
 go run ./cmd/cron-jobs
 ```
 
@@ -42,7 +41,6 @@ data/
   logs/
   scripts/
     jobs/
-  recipes/
 ```
 
 The config stores non-secret values and inherited environment variable names.
@@ -53,10 +51,9 @@ Do not put token values in `config.json`, scripts, logs, or docs.
 Prepare data files:
 
 ```sh
-mkdir -p data/scripts/jobs data/recipes/bash
+mkdir -p data/scripts/jobs
 cp examples/config.json data/config.json
 cp examples/scripts/jobs/github-workflow-dispatch.sh data/scripts/jobs/
-cp examples/recipes/bash/github-actions.sh data/recipes/bash/
 ```
 
 Provide the token as an environment variable:
@@ -104,6 +101,6 @@ that UID, or adjust ownership/permissions on the mounted directory.
 - `PUT /api/config`
 - `GET /api/jobs`
 - `POST /api/jobs/{id}/run`
+- `POST /api/jobs/test`
 - `GET /api/runs?limit=50`
 - `GET /api/runs/{id}/log`
-

@@ -12,7 +12,7 @@ FROM alpine:3.20
 RUN apk add --no-cache bash ca-certificates curl tzdata \
   && addgroup -S app \
   && adduser -S -G app -u 10001 app \
-  && mkdir -p /data/logs /data/scripts/jobs /data/recipes /tmp \
+  && mkdir -p /data/logs /data/scripts/jobs /tmp \
   && chown -R app:app /data /tmp
 
 COPY --from=build /out/cron-jobs /usr/local/bin/cron-jobs
@@ -25,8 +25,6 @@ ENV APP_ADDR=:8080 \
   APP_CONFIG_PATH=/data/config.json \
   APP_LOG_DIR=/data/logs \
   APP_SCRIPT_DIR=/data/scripts/jobs \
-  APP_RECIPE_DIR=/data/recipes \
   APP_TIMEZONE=Asia/Seoul
 
 ENTRYPOINT ["/usr/local/bin/cron-jobs"]
-
