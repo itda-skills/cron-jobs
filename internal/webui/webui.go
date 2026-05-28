@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -30,6 +31,9 @@ type pageData struct {
 	RunID       string
 	FormJob     config.Job
 	FormAction  string
+	ScriptText  string
+	TestOutput  string
+	TestStatus  string
 	Error       string
 	WeekdayList []weekdayOption
 }
@@ -102,19 +106,30 @@ func (s Server) newJob(w http.ResponseWriter, r *http.Request) {
 	data := s.data("New Job", s.Service.Config(), "")
 	data.FormJob = job
 	data.FormAction = "/jobs"
+	data.ScriptText = defaultScriptText()
 	s.render(w, http.StatusOK, "job_form", data)
 }
 
 func (s Server) createJob(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Service.Config()
-	job, err := parseJobForm(r, "")
+	job, scriptText, err := parseJobForm(r, "")
 	if err != nil {
-		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, "/jobs", err)
+		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, scriptText, "/jobs", err, "", "")
 		return
 	}
+	if r.FormValue("action") == "test" {
+		s.renderTestJob(r.Context(), w, "New Job", cfg, job, scriptText, "/jobs")
+		return
+	}
+	scriptPath, err := s.Service.SaveJobScript(job.ID, scriptText)
+	if err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, scriptText, "/jobs", err, "", "")
+		return
+	}
+	job.Runtime.Script = scriptPath
 	cfg.Jobs = append(cfg.Jobs, job)
 	if err := s.Service.SaveConfig(cfg); err != nil {
-		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, "/jobs", err)
+		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, scriptText, "/jobs", err, "", "")
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -130,17 +145,32 @@ func (s Server) editJob(w http.ResponseWriter, r *http.Request) {
 	data := s.data("Edit Job", cfg, "")
 	data.FormJob = job
 	data.FormAction = "/jobs/" + job.ID
+	scriptText, err := s.Service.ReadJobScript(job)
+	if err != nil {
+		data.Error = err.Error()
+	}
+	data.ScriptText = scriptText
 	s.render(w, http.StatusOK, "job_form", data)
 }
 
 func (s Server) updateJob(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Service.Config()
 	id := r.PathValue("id")
-	job, err := parseJobForm(r, id)
+	job, scriptText, err := parseJobForm(r, id)
 	if err != nil {
-		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, "/jobs/"+id, err)
+		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, scriptText, "/jobs/"+id, err, "", "")
 		return
 	}
+	if r.FormValue("action") == "test" {
+		s.renderTestJob(r.Context(), w, "Edit Job", cfg, job, scriptText, "/jobs/"+id)
+		return
+	}
+	scriptPath, err := s.Service.SaveJobScript(job.ID, scriptText)
+	if err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, scriptText, "/jobs/"+id, err, "", "")
+		return
+	}
+	job.Runtime.Script = scriptPath
 	updated := false
 	for i := range cfg.Jobs {
 		if cfg.Jobs[i].ID == id {
@@ -154,7 +184,7 @@ func (s Server) updateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Service.SaveConfig(cfg); err != nil {
-		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, "/jobs/"+id, err)
+		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, scriptText, "/jobs/"+id, err, "", "")
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -208,11 +238,37 @@ func (s Server) data(title string, cfg config.Config, errText string) pageData {
 	}
 }
 
-func (s Server) renderJobForm(w http.ResponseWriter, status int, title string, cfg config.Config, job config.Job, action string, err error) {
+func (s Server) renderJobForm(w http.ResponseWriter, status int, title string, cfg config.Config, job config.Job, scriptText string, action string, err error, testOutput string, testStatus string) {
 	data := s.data(title, cfg, err.Error())
 	data.FormJob = job
 	data.FormAction = action
+	data.ScriptText = scriptText
+	data.TestOutput = testOutput
+	data.TestStatus = testStatus
 	s.render(w, status, "job_form", data)
+}
+
+func (s Server) renderTestJob(ctx context.Context, w http.ResponseWriter, title string, cfg config.Config, job config.Job, scriptText string, action string) {
+	entry, output, err := s.Service.TestJob(ctx, job, scriptText)
+	status := "success"
+	errText := ""
+	if entry.Status != "" {
+		status = entry.Status
+	}
+	if err != nil {
+		if entry.RunID == "" {
+			s.renderJobForm(w, http.StatusBadRequest, title, cfg, job, scriptText, action, err, output, status)
+			return
+		}
+		errText = err.Error()
+	}
+	data := s.data(title, cfg, errText)
+	data.FormJob = job
+	data.FormAction = action
+	data.ScriptText = scriptText
+	data.TestOutput = output
+	data.TestStatus = status
+	s.render(w, http.StatusOK, "job_form", data)
 }
 
 func (s Server) render(w http.ResponseWriter, status int, name string, data pageData) {
@@ -222,9 +278,9 @@ func (s Server) render(w http.ResponseWriter, status int, name string, data page
 	_ = templates.ExecuteTemplate(w, name, data)
 }
 
-func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
+func parseJobForm(r *http.Request, existingID string) (config.Job, string, error) {
 	if err := r.ParseForm(); err != nil {
-		return config.Job{}, err
+		return config.Job{}, "", err
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
 	if existingID != "" {
@@ -232,7 +288,7 @@ func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
 	}
 	timeout, err := strconv.Atoi(strings.TrimSpace(r.FormValue("timeout_seconds")))
 	if err != nil {
-		return config.Job{}, fmt.Errorf("timeout_seconds must be a number")
+		return config.Job{}, r.FormValue("script_content"), fmt.Errorf("timeout_seconds must be a number")
 	}
 	job := config.Job{
 		ID:      id,
@@ -244,7 +300,6 @@ func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
 		},
 		Runtime: jobruntime.Config{
 			Language:       jobruntime.LanguageBash,
-			Script:         strings.TrimSpace(r.FormValue("script")),
 			TimeoutSeconds: timeout,
 		},
 		Schedule: schedule.Spec{
@@ -255,7 +310,7 @@ func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
 	if job.Schedule.Type == schedule.TypeWeekly {
 		job.Schedule.Weekdays = r.Form["weekdays"]
 	}
-	return job, nil
+	return job, r.FormValue("script_content"), nil
 }
 
 func parsePlainEnv(raw string) map[string]string {
@@ -331,6 +386,15 @@ func envPlainText(values map[string]string) string {
 	return strings.Join(lines, "\n")
 }
 
+func defaultScriptText() string {
+	return `#!/usr/bin/env bash
+set -euo pipefail
+
+echo "job=${JOB_ID}"
+echo "reason=${JOB_RUN_REASON}"
+`
+}
+
 var templates = template.Must(template.New("webui").Funcs(template.FuncMap{
 	"join":         strings.Join,
 	"envPlainText": envPlainText,
@@ -363,6 +427,7 @@ const layoutTemplate = `
     input, select, textarea { width:100%; border:1px solid var(--border); border-radius:6px; padding:8px; background:white; color:var(--ink); }
     textarea { min-height:110px; resize:vertical; }
     .config-editor { min-height:320px; }
+    .script-editor { min-height:300px; }
     label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
     .fields { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; }
     .wide { grid-column:1 / -1; }
@@ -496,12 +561,16 @@ const jobFormTemplate = `
         </div>
       </div>
       <div>
-        <label>Script</label>
-        <input name="script" value="{{.FormJob.Runtime.Script}}" placeholder="scripts/jobs/example.sh">
-      </div>
-      <div>
         <label>Timeout Seconds</label>
         <input name="timeout_seconds" value="{{.FormJob.Runtime.TimeoutSeconds}}">
+      </div>
+      <div>
+        <label>Saved Script Path</label>
+        <input value="{{.FormJob.Runtime.Script}}" readonly placeholder="generated on save">
+      </div>
+      <div class="wide">
+        <label>Script Content</label>
+        <textarea class="script-editor" name="script_content" spellcheck="false">{{.ScriptText}}</textarea>
       </div>
       <div class="wide">
         <label>Plain Env</label>
@@ -515,7 +584,14 @@ const jobFormTemplate = `
         <label><input type="checkbox" name="enabled" {{if .FormJob.Enabled}}checked{{end}}> Enabled</label>
       </div>
     </div>
-    <p class="btns"><button type="submit">Save Job</button></p>
+    <p class="btns">
+      <button class="secondary" type="submit" name="action" value="test">Run Test</button>
+      <button type="submit" name="action" value="save">Save Job</button>
+    </p>
+    {{if .TestStatus}}
+      <h2>Test Output - {{.TestStatus}}</h2>
+      <pre>{{.TestOutput}}</pre>
+    {{end}}
   </form>
 </section>
 {{template "layout_end" .}}
