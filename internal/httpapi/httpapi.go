@@ -23,10 +23,22 @@ func (s Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/config", s.getConfig)
 	mux.HandleFunc("PUT /api/config", s.putConfig)
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
+	mux.HandleFunc("POST /api/jobs/test", s.testJob)
 	mux.HandleFunc("POST /api/jobs/{id}/run", s.runJob)
 	mux.HandleFunc("GET /api/runs", s.listRuns)
 	mux.HandleFunc("GET /api/runs/{id}/log", s.getRunLog)
 	return mux
+}
+
+type testJobRequest struct {
+	Job           config.Job `json:"job"`
+	ScriptContent string     `json:"script_content"`
+}
+
+type testJobResponse struct {
+	Entry  any    `json:"entry"`
+	Output string `json:"output"`
+	Error  string `json:"error,omitempty"`
 }
 
 func (s Server) health(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +83,29 @@ func (s Server) runJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
+}
+
+func (s Server) testJob(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	var req testJobRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	entry, output, err := s.Service.TestJob(ctx, req.Job, req.ScriptContent)
+	resp := testJobResponse{Entry: entry, Output: output}
+	if err != nil {
+		if entry.RunID == "" {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		resp.Error = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s Server) listRuns(w http.ResponseWriter, r *http.Request) {

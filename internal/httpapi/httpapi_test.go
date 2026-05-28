@@ -63,6 +63,28 @@ func TestAPIRunJobAndReadLog(t *testing.T) {
 	}
 }
 
+func TestAPITestJobReturnsOutput(t *testing.T) {
+	service := testService(t)
+	handler := Server{Service: service}.Routes()
+
+	body := bytes.NewBufferString(`{"job":{"id":"draft","name":"Draft","enabled":true,"runtime":{"language":"bash","script":"","timeout_seconds":60},"schedule":{"type":"daily","time":"18:10"}},"script_content":"echo api-test:$JOB_TEST_RUN\n"}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/jobs/test", body)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json decode error = %v", err)
+	}
+	if resp.Output != "api-test:true\n" {
+		t.Fatalf("output = %q, want api-test:true", resp.Output)
+	}
+}
+
 func TestAPIPutConfigRejectsInvalidConfig(t *testing.T) {
 	service := testService(t)
 	handler := Server{Service: service}.Routes()

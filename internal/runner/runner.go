@@ -48,6 +48,7 @@ func (r Runner) Run(ctx context.Context, job Job) (logstore.Entry, error) {
 		RunID:       runID,
 		JobID:       job.ID,
 		JobName:     job.Name,
+		RunReason:   runReason(job.RunReason),
 		ScheduledAt: job.ScheduledAt,
 		StartedAt:   startedAt,
 		ExitCode:    -1,
@@ -127,10 +128,7 @@ func (r Runner) createWorkDir(runID string) (string, func(), error) {
 }
 
 func (r Runner) buildEnv(job Job, workDir string) []string {
-	runReason := job.RunReason
-	if runReason == "" {
-		runReason = RunReasonScheduled
-	}
+	runReason := runReason(job.RunReason)
 	testRun := "false"
 	if runReason == RunReasonTest {
 		testRun = "true"
@@ -158,6 +156,13 @@ func (r Runner) buildEnv(job Job, workDir string) []string {
 		out = append(out, name+"="+value)
 	}
 	return out
+}
+
+func runReason(value string) string {
+	if value == "" {
+		return RunReasonScheduled
+	}
+	return value
 }
 
 func writeBashWrapper(workDir string, runtime jobruntime.Resolved) (string, error) {

@@ -13,12 +13,14 @@ import (
 	"github.com/itda-skills/cron-jobs/internal/runner"
 	"github.com/itda-skills/cron-jobs/internal/schedule"
 	"github.com/itda-skills/cron-jobs/internal/scheduler"
+	"github.com/itda-skills/cron-jobs/internal/scriptstore"
 )
 
 type Service struct {
 	settings Settings
 	paths    config.Paths
 	store    logstore.Store
+	scripts  scriptstore.Store
 	runner   runner.Runner
 	lookup   func(string) (string, bool)
 
@@ -43,10 +45,12 @@ func NewService(settings Settings) *Service {
 		ScriptDir: settings.ScriptDir,
 	}
 	store := logstore.Store{Dir: settings.LogDir}
+	scripts := scriptstore.Store{DataDir: settings.DataDir, ScriptDir: settings.ScriptDir}
 	return &Service{
 		settings: settings,
 		paths:    paths,
 		store:    store,
+		scripts:  scripts,
 		runner: runner.Runner{
 			Store:      store,
 			ConfigPath: settings.ConfigPath,
@@ -88,6 +92,14 @@ func (s *Service) SaveConfig(cfg config.Config) error {
 		return err
 	}
 	return s.applyConfig(cfg, time.Now())
+}
+
+func (s *Service) ReadJobScript(job config.Job) (string, error) {
+	return s.scripts.ReadConfigured(job.Runtime.Script)
+}
+
+func (s *Service) SaveJobScript(jobID string, content string) (string, error) {
+	return s.scripts.WriteJob(jobID, content)
 }
 
 func (s *Service) ListJobs() []JobView {
@@ -152,6 +164,54 @@ func (s *Service) RunJobNow(ctx context.Context, id string) (logstore.Entry, err
 		Runtime:      planned.Runtime,
 		Env:          planned.Env,
 	})
+}
+
+func (s *Service) TestJob(ctx context.Context, job config.Job, scriptContent string) (logstore.Entry, string, error) {
+	now := time.Now()
+	relScript, cleanup, err := s.scripts.WriteTest(job.ID, scriptContent, now)
+	if err != nil {
+		return logstore.Entry{}, "", err
+	}
+	defer cleanup()
+
+	cfg := s.Config()
+	job.Enabled = true
+	job.Runtime.Script = relScript
+	testCfg := config.Config{
+		Version:  cfg.Version,
+		Timezone: cfg.Timezone,
+		Env:      cfg.Env,
+		Jobs:     []config.Job{job},
+	}
+	if testCfg.Version == 0 {
+		testCfg.Version = 1
+	}
+	if testCfg.Timezone == "" {
+		testCfg.Timezone = s.settings.Timezone
+	}
+
+	planned, err := scheduler.BuildPlan(testCfg, s.paths, now, s.lookup)
+	if err != nil {
+		return logstore.Entry{}, "", err
+	}
+	if len(planned) != 1 {
+		return logstore.Entry{}, "", fmt.Errorf("test job was not planned")
+	}
+
+	entry, runErr := s.runner.Run(ctx, runner.Job{
+		ID:           planned[0].ID,
+		Name:         planned[0].Name,
+		ScheduleType: planned[0].ScheduleType,
+		ScheduledAt:  now,
+		RunReason:    runner.RunReasonTest,
+		Runtime:      planned[0].Runtime,
+		Env:          planned[0].Env,
+	})
+	output, readErr := s.store.ReadLog(entry)
+	if readErr != nil && runErr == nil {
+		return entry, "", readErr
+	}
+	return entry, string(output), runErr
 }
 
 func (s *Service) RunDue(ctx context.Context, now time.Time) {
@@ -234,6 +294,7 @@ func (s *Service) reserveDue(now time.Time) []scheduler.PlannedJob {
 				RunID:       logstore.NewRunID(id, planned.NextRun),
 				JobID:       id,
 				JobName:     planned.Name,
+				RunReason:   runner.RunReasonScheduled,
 				ScheduledAt: planned.NextRun,
 				StartedAt:   now,
 				FinishedAt:  now,

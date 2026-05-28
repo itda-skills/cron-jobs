@@ -81,3 +81,51 @@ func TestRunDueExecutesJobAndAdvancesNextRun(t *testing.T) {
 		t.Fatalf("next run was not advanced: %v", jobs[0].NextRun)
 	}
 }
+
+func TestTestJobRunsDraftScriptWithoutSavingConfig(t *testing.T) {
+	dataDir := t.TempDir()
+	scriptDir := filepath.Join(dataDir, "scripts", "jobs")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := Settings{
+		Addr:       ":0",
+		DataDir:    dataDir,
+		ConfigPath: filepath.Join(dataDir, "config.json"),
+		LogDir:     filepath.Join(dataDir, "logs"),
+		ScriptDir:  scriptDir,
+		Timezone:   "Asia/Seoul",
+	}
+	service := NewService(settings)
+	if err := service.applyConfig(config.Config{Version: 1, Timezone: "Asia/Seoul"}, time.Now()); err != nil {
+		t.Fatalf("applyConfig() error = %v", err)
+	}
+
+	job := config.Job{
+		ID:      "draft",
+		Name:    "Draft",
+		Enabled: true,
+		Runtime: jobruntime.Config{
+			Language:       jobruntime.LanguageBash,
+			TimeoutSeconds: 5,
+		},
+		Schedule: schedule.Spec{Type: schedule.TypeDaily, Time: "18:10"},
+	}
+	entry, output, err := service.TestJob(context.Background(), job, "echo reason:$JOB_RUN_REASON\necho test:$JOB_TEST_RUN\n")
+	if err != nil {
+		t.Fatalf("TestJob() error = %v, output = %s", err, output)
+	}
+	if entry.RunReason != "test" {
+		t.Fatalf("RunReason = %q, want test", entry.RunReason)
+	}
+	if entry.Status != "success" {
+		t.Fatalf("Status = %q, want success", entry.Status)
+	}
+	if output != "reason:test\ntest:true\n" {
+		t.Fatalf("output = %q, want test env output", output)
+	}
+	if _, err := os.Stat(filepath.Join(scriptDir, "draft.sh")); !os.IsNotExist(err) {
+		t.Fatalf("saved job script exists after test run, err = %v", err)
+	}
+}

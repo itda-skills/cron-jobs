@@ -27,6 +27,7 @@ type Entry struct {
 	RunID          string    `json:"run_id"`
 	JobID          string    `json:"job_id"`
 	JobName        string    `json:"job_name"`
+	RunReason      string    `json:"run_reason,omitempty"`
 	ScheduledAt    time.Time `json:"scheduled_at"`
 	StartedAt      time.Time `json:"started_at"`
 	FinishedAt     time.Time `json:"finished_at"`
