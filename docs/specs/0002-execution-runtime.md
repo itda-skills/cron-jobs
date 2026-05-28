@@ -18,36 +18,50 @@ Initial runtime:
 
 Future runtimes should be represented with the same shape:
 
-```yaml
-runtime:
-  language: bash
-  script: scripts/jobs/weekday-report.sh
-  recipes: [github-actions]
-  timeout_seconds: 60
+```json
+{
+  "runtime": {
+    "language": "bash",
+    "script": "scripts/jobs/weekday-report.sh",
+    "recipes": ["github-actions"],
+    "timeout_seconds": 60
+  }
+}
 ```
 
 ## Environment Model
 
 Separate global and job-specific environment.
 
-```yaml
-env:
-  global:
-    plain:
-      BRANCH: main
-    inherit:
-      - GITHUB_PAT
+```json
+{
+  "env": {
+    "global": {
+      "plain": {
+        "BRANCH": "main"
+      },
+      "inherit": ["GITHUB_PAT"]
+    }
+  }
+}
 ```
 
-```yaml
-jobs:
-  - id: weekday-report
-    env:
-      plain:
-        OWNER: itda-skills
-        REPO: rs-golden-queens
-        WORKFLOW_FILE: flow-kr.yml
-      inherit: []
+```json
+{
+  "jobs": [
+    {
+      "id": "weekday-report",
+      "env": {
+        "plain": {
+          "OWNER": "itda-skills",
+          "REPO": "rs-golden-queens",
+          "WORKFLOW_FILE": "flow-kr.yml"
+        },
+        "inherit": []
+      }
+    }
+  ]
+}
 ```
 
 Rules:
@@ -64,11 +78,16 @@ Rules:
 
 Recipes are reusable runtime-specific helpers.
 
-```yaml
-recipes:
-  - id: github-actions
-    language: bash
-    path: recipes/bash/github-actions.sh
+```json
+{
+  "recipes": [
+    {
+      "id": "github-actions",
+      "language": "bash",
+      "path": "recipes/bash/github-actions.sh"
+    }
+  ]
+}
 ```
 
 Rules:
@@ -121,4 +140,3 @@ The container should be non-root, non-privileged, and avoid broad host mounts.
 Arbitrary Bash scripts can execute any command available in the container and
 can read mounted app data. Strong network egress controls require a controlled
 HTTP helper, proxy, or container-level policy.
-
