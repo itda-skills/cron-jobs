@@ -11,6 +11,7 @@ import (
 
 	"github.com/itda-skills/cron-jobs/internal/app"
 	"github.com/itda-skills/cron-jobs/internal/httpapi"
+	"github.com/itda-skills/cron-jobs/internal/webui"
 )
 
 func main() {
@@ -33,7 +34,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    settings.Addr,
-		Handler: httpapi.Server{Service: service}.Routes(),
+		Handler: webui.Server{Service: service}.Routes(httpapi.Server{Service: service}.Routes()),
 	}
 
 	go func() {

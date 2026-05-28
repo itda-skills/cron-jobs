@@ -1,0 +1,566 @@
+package webui
+
+import (
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/itda-skills/cron-jobs/internal/app"
+	"github.com/itda-skills/cron-jobs/internal/config"
+	"github.com/itda-skills/cron-jobs/internal/jobenv"
+	"github.com/itda-skills/cron-jobs/internal/jobruntime"
+	"github.com/itda-skills/cron-jobs/internal/schedule"
+)
+
+type Server struct {
+	Service *app.Service
+}
+
+type pageData struct {
+	Title       string
+	Config      config.Config
+	ConfigJSON  string
+	Jobs        []app.JobView
+	Runs        any
+	RunLog      string
+	RunID       string
+	FormJob     config.Job
+	FormAction  string
+	Error       string
+	RecipeIDs   []string
+	WeekdayList []weekdayOption
+}
+
+type weekdayOption struct {
+	Value   string
+	Label   string
+	Checked bool
+}
+
+func (s Server) Routes(api http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", s.dashboard)
+	mux.HandleFunc("POST /config", s.saveConfig)
+	mux.HandleFunc("GET /jobs/new", s.newJob)
+	mux.HandleFunc("POST /jobs", s.createJob)
+	mux.HandleFunc("GET /jobs/{id}/edit", s.editJob)
+	mux.HandleFunc("POST /jobs/{id}", s.updateJob)
+	mux.HandleFunc("POST /jobs/{id}/toggle", s.toggleJob)
+	mux.HandleFunc("POST /jobs/{id}/run", s.runJob)
+	mux.HandleFunc("GET /runs/{id}", s.runLog)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			api.ServeHTTP(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+func (s Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Service.Config()
+	runs, err := s.Service.RecentRuns(20)
+	if err != nil {
+		s.render(w, http.StatusInternalServerError, "dashboard", s.data("Dashboard", cfg, err.Error()))
+		return
+	}
+	data := s.data("Dashboard", cfg, "")
+	data.Jobs = s.Service.ListJobs()
+	data.Runs = runs
+	s.render(w, http.StatusOK, "dashboard", data)
+}
+
+func (s Server) saveConfig(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
+		return
+	}
+	var cfg config.Config
+	if err := json.Unmarshal([]byte(r.FormValue("config")), &cfg); err != nil {
+		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
+		return
+	}
+	if err := s.Service.SaveConfig(cfg); err != nil {
+		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s Server) newJob(w http.ResponseWriter, r *http.Request) {
+	job := config.Job{
+		Enabled: true,
+		Runtime: jobruntime.Config{
+			Language:       jobruntime.LanguageBash,
+			TimeoutSeconds: 60,
+		},
+		Schedule: schedule.Spec{Type: schedule.TypeDaily, Time: "18:10"},
+	}
+	data := s.data("New Job", s.Service.Config(), "")
+	data.FormJob = job
+	data.FormAction = "/jobs"
+	s.render(w, http.StatusOK, "job_form", data)
+}
+
+func (s Server) createJob(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Service.Config()
+	job, err := parseJobForm(r, "")
+	if err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, "/jobs", err)
+		return
+	}
+	cfg.Jobs = append(cfg.Jobs, job)
+	if err := s.Service.SaveConfig(cfg); err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "New Job", cfg, job, "/jobs", err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s Server) editJob(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Service.Config()
+	job, ok := findJob(cfg, r.PathValue("id"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	data := s.data("Edit Job", cfg, "")
+	data.FormJob = job
+	data.FormAction = "/jobs/" + job.ID
+	s.render(w, http.StatusOK, "job_form", data)
+}
+
+func (s Server) updateJob(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Service.Config()
+	id := r.PathValue("id")
+	job, err := parseJobForm(r, id)
+	if err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, "/jobs/"+id, err)
+		return
+	}
+	updated := false
+	for i := range cfg.Jobs {
+		if cfg.Jobs[i].ID == id {
+			cfg.Jobs[i] = job
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.Service.SaveConfig(cfg); err != nil {
+		s.renderJobForm(w, http.StatusBadRequest, "Edit Job", cfg, job, "/jobs/"+id, err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s Server) toggleJob(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Service.Config()
+	id := r.PathValue("id")
+	for i := range cfg.Jobs {
+		if cfg.Jobs[i].ID == id {
+			cfg.Jobs[i].Enabled = !cfg.Jobs[i].Enabled
+			if err := s.Service.SaveConfig(cfg); err != nil {
+				s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", cfg, err.Error()))
+				return
+			}
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
+	http.NotFound(w, r)
+}
+
+func (s Server) runJob(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.Service.RunJobNow(r.Context(), r.PathValue("id")); err != nil {
+		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s Server) runLog(w http.ResponseWriter, r *http.Request) {
+	runID := r.PathValue("id")
+	logData, err := s.Service.ReadRunLog(runID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	data := s.data("Run Log", s.Service.Config(), "")
+	data.RunID = runID
+	data.RunLog = string(logData)
+	s.render(w, http.StatusOK, "run_log", data)
+}
+
+func (s Server) data(title string, cfg config.Config, errText string) pageData {
+	configJSON, _ := json.MarshalIndent(cfg, "", "  ")
+	recipeIDs := make([]string, 0, len(cfg.Recipes))
+	for _, recipe := range cfg.Recipes {
+		recipeIDs = append(recipeIDs, recipe.ID)
+	}
+	sort.Strings(recipeIDs)
+	return pageData{
+		Title:      title,
+		Config:     cfg,
+		ConfigJSON: string(configJSON),
+		Error:      errText,
+		RecipeIDs:  recipeIDs,
+	}
+}
+
+func (s Server) renderJobForm(w http.ResponseWriter, status int, title string, cfg config.Config, job config.Job, action string, err error) {
+	data := s.data(title, cfg, err.Error())
+	data.FormJob = job
+	data.FormAction = action
+	s.render(w, status, "job_form", data)
+}
+
+func (s Server) render(w http.ResponseWriter, status int, name string, data pageData) {
+	data.WeekdayList = weekdays(data.FormJob.Schedule.Weekdays)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_ = templates.ExecuteTemplate(w, name, data)
+}
+
+func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
+	if err := r.ParseForm(); err != nil {
+		return config.Job{}, err
+	}
+	id := strings.TrimSpace(r.FormValue("id"))
+	if existingID != "" {
+		id = existingID
+	}
+	timeout, err := strconv.Atoi(strings.TrimSpace(r.FormValue("timeout_seconds")))
+	if err != nil {
+		return config.Job{}, fmt.Errorf("timeout_seconds must be a number")
+	}
+	job := config.Job{
+		ID:      id,
+		Name:    strings.TrimSpace(r.FormValue("name")),
+		Enabled: r.FormValue("enabled") == "on",
+		Env: jobenv.Config{
+			Plain:   parsePlainEnv(r.FormValue("env_plain")),
+			Inherit: splitCSV(r.FormValue("env_inherit")),
+		},
+		Runtime: jobruntime.Config{
+			Language:       jobruntime.LanguageBash,
+			Script:         strings.TrimSpace(r.FormValue("script")),
+			Recipes:        r.Form["recipes"],
+			TimeoutSeconds: timeout,
+		},
+		Schedule: schedule.Spec{
+			Type: strings.TrimSpace(r.FormValue("schedule_type")),
+			Time: strings.TrimSpace(r.FormValue("time")),
+		},
+	}
+	if job.Schedule.Type == schedule.TypeWeekly {
+		job.Schedule.Weekdays = r.Form["weekdays"]
+	}
+	return job, nil
+}
+
+func parsePlainEnv(raw string) map[string]string {
+	env := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		name, value, ok := strings.Cut(line, "=")
+		if !ok {
+			env[strings.TrimSpace(line)] = ""
+			continue
+		}
+		env[strings.TrimSpace(name)] = strings.TrimSpace(value)
+	}
+	return env
+}
+
+func splitCSV(raw string) []string {
+	var out []string
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func findJob(cfg config.Config, id string) (config.Job, bool) {
+	for _, job := range cfg.Jobs {
+		if job.ID == id {
+			return job, true
+		}
+	}
+	return config.Job{}, false
+}
+
+func weekdays(selected []string) []weekdayOption {
+	selectedMap := map[string]bool{}
+	for _, day := range selected {
+		selectedMap[day] = true
+	}
+	values := []weekdayOption{
+		{Value: "sunday", Label: "Sun"},
+		{Value: "monday", Label: "Mon"},
+		{Value: "tuesday", Label: "Tue"},
+		{Value: "wednesday", Label: "Wed"},
+		{Value: "thursday", Label: "Thu"},
+		{Value: "friday", Label: "Fri"},
+		{Value: "saturday", Label: "Sat"},
+	}
+	for i := range values {
+		values[i].Checked = selectedMap[values[i].Value]
+	}
+	return values
+}
+
+func selected(values []string, value string) bool {
+	for _, current := range values {
+		if current == value {
+			return true
+		}
+	}
+	return false
+}
+
+func envPlainText(values map[string]string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	lines := make([]string, 0, len(keys))
+	for _, key := range keys {
+		lines = append(lines, key+"="+values[key])
+	}
+	return strings.Join(lines, "\n")
+}
+
+var templates = template.Must(template.New("webui").Funcs(template.FuncMap{
+	"join":         strings.Join,
+	"selected":     selected,
+	"envPlainText": envPlainText,
+}).Parse(layoutTemplate + dashboardTemplate + jobFormTemplate + runLogTemplate))
+
+const layoutTemplate = `
+{{define "layout_start"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} - Cron Jobs</title>
+  <style>
+    :root { color-scheme: light; --border:#d9dee7; --bg:#f6f7f9; --ink:#1f2937; --muted:#667085; --accent:#2f6fed; --danger:#b42318; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+    header { height:52px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border); background:white; }
+    main { max-width:1180px; margin:0 auto; padding:24px; }
+    h1 { font-size:20px; margin:0; }
+    h2 { font-size:15px; margin:0 0 12px; }
+    a { color:var(--accent); text-decoration:none; }
+    .grid { display:grid; grid-template-columns: minmax(0, 1fr); gap:18px; }
+    .panel { background:white; border:1px solid var(--border); border-radius:8px; padding:16px; }
+    .toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    th { font-size:12px; color:var(--muted); font-weight:600; }
+    code, pre, textarea, input, select { font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    input, select, textarea { width:100%; border:1px solid var(--border); border-radius:6px; padding:8px; background:white; color:var(--ink); }
+    textarea { min-height:110px; resize:vertical; }
+    .config-editor { min-height:320px; }
+    label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+    .fields { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; }
+    .wide { grid-column:1 / -1; }
+    .checks { display:flex; flex-wrap:wrap; gap:10px; }
+    .checks label { display:flex; align-items:center; gap:6px; margin:0; color:var(--ink); }
+    .checks input { width:auto; }
+    .btns { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    button, .button { border:0; border-radius:6px; background:var(--accent); color:white; padding:8px 12px; cursor:pointer; display:inline-block; }
+    .secondary { background:#eef1f5; color:var(--ink); }
+    .danger { background:var(--danger); }
+    .muted { color:var(--muted); }
+    .error { padding:10px 12px; border:1px solid #fda29b; background:#fff1f0; color:#912018; border-radius:6px; margin-bottom:14px; }
+    form.inline { display:inline; }
+    pre { white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:14px; border-radius:8px; overflow:auto; }
+    @media (max-width: 760px) { main { padding:14px; } header { padding:0 14px; } .fields { grid-template-columns:1fr; } th:nth-child(3), td:nth-child(3) { display:none; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Cron Jobs</h1>
+  <nav><a href="/">Dashboard</a> · <a href="/jobs/new">New Job</a></nav>
+</header>
+<main>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{end}}
+
+{{define "layout_end"}}
+</main>
+</body>
+</html>
+{{end}}
+`
+
+const dashboardTemplate = `
+{{define "dashboard"}}
+{{template "layout_start" .}}
+<div class="grid">
+  <section class="panel">
+    <div class="toolbar">
+      <h2>Jobs</h2>
+      <a class="button" href="/jobs/new">New Job</a>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Schedule</th><th>Next Run</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+      {{range .Jobs}}
+        <tr>
+          <td><a href="/jobs/{{.ID}}/edit">{{.Name}}</a><br><span class="muted">{{.ID}}</span></td>
+          <td>{{.ScheduleType}}</td>
+          <td>{{if .NextRun.IsZero}}-{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+          <td>{{if .Running}}Running{{else if .Enabled}}Enabled{{else}}Disabled{{end}}</td>
+          <td class="btns">
+            <form class="inline" method="post" action="/jobs/{{.ID}}/run"><button type="submit">Run</button></form>
+            <form class="inline" method="post" action="/jobs/{{.ID}}/toggle"><button class="secondary" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button></form>
+          </td>
+        </tr>
+      {{else}}
+        <tr><td colspan="5" class="muted">No jobs configured.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Recent Runs</h2>
+    <table>
+      <thead><tr><th>Run</th><th>Job</th><th>Status</th><th>Finished</th></tr></thead>
+      <tbody>
+      {{range .Runs}}
+        <tr>
+          <td><a href="/runs/{{.RunID}}">{{.RunID}}</a></td>
+          <td>{{.JobName}}</td>
+          <td>{{.Status}}</td>
+          <td>{{.FinishedAt.Format "2006-01-02 15:04:05 MST"}}</td>
+        </tr>
+      {{else}}
+        <tr><td colspan="4" class="muted">No runs yet.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Raw Config</h2>
+    <form method="post" action="/config">
+      <textarea class="config-editor" name="config">{{.ConfigJSON}}</textarea>
+      <p class="muted">Secret values should stay in container environment variables. Store only inherited variable names here.</p>
+      <button type="submit">Save Config</button>
+    </form>
+  </section>
+</div>
+{{template "layout_end" .}}
+{{end}}
+`
+
+const jobFormTemplate = `
+{{define "job_form"}}
+{{template "layout_start" .}}
+<section class="panel">
+  <div class="toolbar">
+    <h2>{{.Title}}</h2>
+    <a class="button secondary" href="/">Back</a>
+  </div>
+  <form method="post" action="{{.FormAction}}">
+    <div class="fields">
+      <div>
+        <label>ID</label>
+        <input name="id" value="{{.FormJob.ID}}" {{if .FormJob.ID}}readonly{{end}}>
+      </div>
+      <div>
+        <label>Name</label>
+        <input name="name" value="{{.FormJob.Name}}">
+      </div>
+      <div>
+        <label>Schedule Type</label>
+        <select name="schedule_type">
+          <option value="daily" {{if eq .FormJob.Schedule.Type "daily"}}selected{{end}}>Daily</option>
+          <option value="weekly" {{if eq .FormJob.Schedule.Type "weekly"}}selected{{end}}>Weekly</option>
+        </select>
+      </div>
+      <div>
+        <label>Time</label>
+        <input name="time" value="{{.FormJob.Schedule.Time}}" placeholder="18:10">
+      </div>
+      <div class="wide">
+        <label>Weekdays</label>
+        <div class="checks">
+          {{range .WeekdayList}}
+            <label><input type="checkbox" name="weekdays" value="{{.Value}}" {{if .Checked}}checked{{end}}> {{.Label}}</label>
+          {{end}}
+        </div>
+      </div>
+      <div>
+        <label>Script</label>
+        <input name="script" value="{{.FormJob.Runtime.Script}}" placeholder="scripts/jobs/example.sh">
+      </div>
+      <div>
+        <label>Timeout Seconds</label>
+        <input name="timeout_seconds" value="{{.FormJob.Runtime.TimeoutSeconds}}">
+      </div>
+      <div class="wide">
+        <label>Recipes</label>
+        <div class="checks">
+          {{range .RecipeIDs}}
+            <label><input type="checkbox" name="recipes" value="{{.}}" {{if selected $.FormJob.Runtime.Recipes .}}checked{{end}}> {{.}}</label>
+          {{else}}
+            <span class="muted">No recipes configured. Add recipes in raw config.</span>
+          {{end}}
+        </div>
+      </div>
+      <div class="wide">
+        <label>Plain Env</label>
+        <textarea name="env_plain" placeholder="OWNER=itda-skills&#10;REPO=rs-golden-queens">{{envPlainText .FormJob.Env.Plain}}</textarea>
+      </div>
+      <div class="wide">
+        <label>Inherited Env Names</label>
+        <input name="env_inherit" value="{{join .FormJob.Env.Inherit ","}}" placeholder="GITHUB_PAT">
+      </div>
+      <div class="wide checks">
+        <label><input type="checkbox" name="enabled" {{if .FormJob.Enabled}}checked{{end}}> Enabled</label>
+      </div>
+    </div>
+    <p class="btns"><button type="submit">Save Job</button></p>
+  </form>
+</section>
+{{template "layout_end" .}}
+{{end}}
+`
+
+const runLogTemplate = `
+{{define "run_log"}}
+{{template "layout_start" .}}
+<section class="panel">
+  <div class="toolbar">
+    <h2>Run Log</h2>
+    <a class="button secondary" href="/">Back</a>
+  </div>
+  <p class="muted">{{.RunID}}</p>
+  <pre>{{.RunLog}}</pre>
+</section>
+{{template "layout_end" .}}
+{{end}}
+`
