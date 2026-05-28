@@ -431,6 +431,8 @@ const layoutTemplate = `
     .secondary { background:#eef1f5; color:var(--ink); }
     .danger { background:var(--danger); }
     .muted { color:var(--muted); }
+    .next-run-countdown { display:block; margin-top:2px; }
+    .next-run-countdown.due { color:var(--accent); }
     .error { padding:10px 12px; border:1px solid #fda29b; background:#fff1f0; color:#912018; border-radius:6px; margin-bottom:14px; }
     form.inline { display:inline; }
     pre { white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:14px; border-radius:8px; overflow:auto; }
@@ -448,6 +450,73 @@ const layoutTemplate = `
 
 {{define "layout_end"}}
 </main>
+<script>
+(function () {
+  var reloadTimer = null;
+  var reloadDelayMs = 20000;
+
+  function formatRemaining(ms) {
+    if (!Number.isFinite(ms)) {
+      return "";
+    }
+    if (ms <= 0) {
+      return "checking...";
+    }
+
+    var seconds = Math.ceil(ms / 1000);
+    if (seconds < 60) {
+      return seconds + "s";
+    }
+
+    var minutes = Math.ceil(seconds / 60);
+    if (minutes < 60) {
+      return "~" + minutes + "m";
+    }
+
+    var hours = Math.floor(minutes / 60);
+    var remainingMinutes = minutes % 60;
+    if (remainingMinutes === 0) {
+      return "~" + hours + "h";
+    }
+    return "~" + hours + "h " + remainingMinutes + "m";
+  }
+
+  function scheduleReload() {
+    if (reloadTimer) {
+      return;
+    }
+    reloadTimer = window.setTimeout(function () {
+      window.location.reload();
+    }, reloadDelayMs);
+  }
+
+  function updateNextRunCountdowns() {
+    var now = Date.now();
+    var hasDueJob = false;
+    document.querySelectorAll("[data-next-run]").forEach(function (node) {
+      var nextRun = Date.parse(node.dataset.nextRun);
+      if (Number.isNaN(nextRun)) {
+        node.textContent = "";
+        return;
+      }
+      var remaining = nextRun - now;
+      node.textContent = formatRemaining(remaining);
+      if (remaining <= 0) {
+        node.classList.add("due");
+        hasDueJob = true;
+      } else {
+        node.classList.remove("due");
+      }
+    });
+    if (hasDueJob) {
+      scheduleReload();
+    }
+  }
+
+  updateNextRunCountdowns();
+  window.setInterval(updateNextRunCountdowns, 1000);
+})();
+</script>
 </body>
 </html>
 {{end}}
@@ -469,7 +538,14 @@ const dashboardTemplate = `
         <tr>
           <td><a href="/jobs/{{.ID}}/edit">{{.Name}}</a></td>
           <td>{{.ScheduleType}}</td>
-          <td>{{if .NextRun.IsZero}}-{{else}}{{.NextRun.Format "2006-01-02 15:04:05 MST"}}{{end}}</td>
+          <td>
+            {{if .NextRun.IsZero}}
+              -
+            {{else}}
+              <span>{{.NextRun.Format "2006-01-02 15:04:05 MST"}}</span>
+              <span class="muted next-run-countdown" data-next-run="{{.NextRun.Format "2006-01-02T15:04:05Z07:00"}}" aria-live="polite"></span>
+            {{end}}
+          </td>
           <td>{{if .Running}}Running{{else if .Enabled}}Enabled{{else}}Disabled{{end}}</td>
           <td class="btns">
             <form class="inline" method="post" action="/jobs/{{.ID}}/run"><button type="submit">Run</button></form>

@@ -35,6 +35,12 @@ func TestDashboardRendersJobs(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "Raw Config") {
 		t.Fatalf("dashboard exposes raw config editor")
 	}
+	if !strings.Contains(rec.Body.String(), `class="muted next-run-countdown" data-next-run=`) {
+		t.Fatalf("dashboard does not render next-run countdown target: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "window.location.reload()") {
+		t.Fatalf("dashboard does not render trigger-time refresh script")
+	}
 }
 
 func TestRunLogRendersLinkedJobName(t *testing.T) {
