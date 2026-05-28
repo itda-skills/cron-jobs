@@ -2,7 +2,6 @@ package webui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -25,7 +24,6 @@ type Server struct {
 type pageData struct {
 	Title       string
 	Config      config.Config
-	ConfigJSON  string
 	Jobs        []app.JobView
 	Runs        any
 	RunLog      string
@@ -48,7 +46,6 @@ type weekdayOption struct {
 func (s Server) Routes(api http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.dashboard)
-	mux.HandleFunc("POST /config", s.saveConfig)
 	mux.HandleFunc("GET /jobs/new", s.newJob)
 	mux.HandleFunc("POST /jobs", s.createJob)
 	mux.HandleFunc("GET /jobs/{id}/edit", s.editJob)
@@ -76,23 +73,6 @@ func (s Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	data.Jobs = s.Service.ListJobs()
 	data.Runs = runs
 	s.render(w, http.StatusOK, "dashboard", data)
-}
-
-func (s Server) saveConfig(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
-		return
-	}
-	var cfg config.Config
-	if err := json.Unmarshal([]byte(r.FormValue("config")), &cfg); err != nil {
-		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
-		return
-	}
-	if err := s.Service.SaveConfig(cfg); err != nil {
-		s.render(w, http.StatusBadRequest, "dashboard", s.data("Dashboard", s.Service.Config(), err.Error()))
-		return
-	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s Server) newJob(w http.ResponseWriter, r *http.Request) {
@@ -230,12 +210,10 @@ func (s Server) runLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Server) data(title string, cfg config.Config, errText string) pageData {
-	configJSON, _ := json.MarshalIndent(cfg, "", "  ")
 	return pageData{
-		Title:      title,
-		Config:     cfg,
-		ConfigJSON: string(configJSON),
-		Error:      errText,
+		Title:  title,
+		Config: cfg,
+		Error:  errText,
 	}
 }
 
@@ -433,7 +411,6 @@ const layoutTemplate = `
     code, pre, textarea, input, select { font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
     input, select, textarea { width:100%; border:1px solid var(--border); border-radius:6px; padding:8px; background:white; color:var(--ink); }
     textarea { min-height:110px; resize:vertical; }
-    .config-editor { min-height:320px; }
     .script-editor { min-height:300px; }
     label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
     .fields { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; }
@@ -517,14 +494,6 @@ const dashboardTemplate = `
     </table>
   </section>
 
-  <section class="panel">
-    <h2>Raw Config</h2>
-    <form method="post" action="/config">
-      <textarea class="config-editor" name="config">{{.ConfigJSON}}</textarea>
-      <p class="muted">Secret values should stay in container environment variables. Store only inherited variable names here.</p>
-      <button type="submit">Save Config</button>
-    </form>
-  </section>
 </div>
 {{template "layout_end" .}}
 {{end}}

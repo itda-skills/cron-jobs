@@ -31,6 +31,9 @@ func TestDashboardRendersJobs(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Daily") {
 		t.Fatalf("dashboard does not contain job name: %s", rec.Body.String())
 	}
+	if strings.Contains(rec.Body.String(), "Raw Config") {
+		t.Fatalf("dashboard exposes raw config editor")
+	}
 }
 
 func TestNewJobFormRenders(t *testing.T) {
