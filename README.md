@@ -40,6 +40,8 @@ go run ./cmd/cron-jobs
 data/
   config.json
   logs/
+    index.jsonl
+    runs/
   scripts/
     jobs/
 ```
@@ -48,6 +50,13 @@ The web UI generates job IDs and manages script file paths automatically. The
 config stores those internal references along with non-secret values and
 inherited environment variable names. Do not put token values in `config.json`,
 scripts, logs, or docs.
+
+For persistence, mount one host directory to `/data` and keep these settings
+inside that mount:
+
+- `APP_CONFIG_PATH=/data/config.json`
+- `APP_LOG_DIR=/data/logs`
+- `APP_SCRIPT_DIR=/data/scripts/jobs`
 
 ## GitHub Actions Dispatch Example
 
@@ -89,7 +98,7 @@ The compose example uses:
 In Synology Container Manager:
 
 1. Build or import the image.
-2. Mount a host folder to `/data`.
+2. Mount a host folder, for example `/volume1/docker/cron-jobs`, to `/data`.
 3. Set the environment variables from `compose.yaml`.
 4. Add secret values such as `GITHUB_PAT` as environment variables.
 5. Publish container port `8080`.

@@ -14,6 +14,7 @@ import (
 	"github.com/itda-skills/cron-jobs/internal/idgen"
 	"github.com/itda-skills/cron-jobs/internal/jobenv"
 	"github.com/itda-skills/cron-jobs/internal/jobruntime"
+	"github.com/itda-skills/cron-jobs/internal/logstore"
 	"github.com/itda-skills/cron-jobs/internal/schedule"
 )
 
@@ -25,7 +26,8 @@ type pageData struct {
 	Title       string
 	Config      config.Config
 	Jobs        []app.JobView
-	Runs        any
+	Runs        []logstore.Entry
+	Run         logstore.Entry
 	RunLog      string
 	RunID       string
 	FormJob     config.Job
@@ -198,12 +200,18 @@ func (s Server) runJob(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) runLog(w http.ResponseWriter, r *http.Request) {
 	runID := r.PathValue("id")
+	entry, err := s.Service.FindRun(runID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	logData, err := s.Service.ReadRunLog(runID)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	data := s.data("Run Log", s.Service.Config(), "")
+	data.Run = entry
 	data.RunID = runID
 	data.RunLog = string(logData)
 	s.render(w, http.StatusOK, "run_log", data)
@@ -483,7 +491,7 @@ const dashboardTemplate = `
       {{range .Runs}}
         <tr>
           <td><a href="/runs/{{.RunID}}">{{.RunID}}</a></td>
-          <td>{{.JobName}}</td>
+          <td><a href="/jobs/{{.JobID}}/edit">{{.JobName}}</a></td>
           <td>{{.Status}}</td>
           <td>{{.FinishedAt.Format "2006-01-02 15:04:05 MST"}}</td>
         </tr>
@@ -574,7 +582,10 @@ const runLogTemplate = `
     <h2>Run Log</h2>
     <a class="button secondary" href="/">Back</a>
   </div>
-  <p class="muted">{{.RunID}}</p>
+  <p>
+    <span class="muted">Run</span> {{.RunID}}<br>
+    <span class="muted">Job</span> <a href="/jobs/{{.Run.JobID}}/edit">{{.Run.JobName}}</a>
+  </p>
   <pre>{{.RunLog}}</pre>
 </section>
 {{template "layout_end" .}}

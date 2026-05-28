@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -33,6 +34,30 @@ func TestDashboardRendersJobs(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "Raw Config") {
 		t.Fatalf("dashboard exposes raw config editor")
+	}
+}
+
+func TestRunLogRendersLinkedJobName(t *testing.T) {
+	service := testService(t)
+	handler := Server{Service: service}.Routes(httpapi.Server{Service: service}.Routes())
+	entry, err := service.RunJobNow(context.Background(), "daily")
+	if err != nil {
+		t.Fatalf("RunJobNow() error = %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/runs/"+entry.RunID, nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<a href="/jobs/daily/edit">Daily</a>`) {
+		t.Fatalf("run log missing linked job name: %s", body)
+	}
+	if !strings.Contains(body, "hello") {
+		t.Fatalf("run log missing command output: %s", body)
 	}
 }
 
