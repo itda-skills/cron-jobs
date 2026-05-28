@@ -34,7 +34,7 @@ Recommended environment variables:
 
 - `APP_ADDR`: HTTP bind address. Default: `:8080`.
 - `APP_DATA_DIR`: persistent data directory. Default: `/data`.
-- `APP_CONFIG_PATH`: config file path. Default: `/data/config.yaml`.
+- `APP_CONFIG_PATH`: config file path. Default: `/data/config.json`.
 - `APP_LOG_DIR`: job log directory. Default: `/data/logs`.
 - `APP_SCRIPT_DIR`: job script directory. Default: `/data/scripts/jobs`.
 - `APP_RECIPE_DIR`: library recipe directory. Default: `/data/recipes`.
@@ -44,7 +44,7 @@ Recommended mounted layout:
 
 ```text
 /data
-  config.yaml
+  config.json
   logs/
   scripts/jobs/
   recipes/
@@ -97,4 +97,3 @@ Prefer focused unit tests for each logic layer before wiring it into the UI.
 - Use atomic writes for config and index updates.
 - When UI work starts, keep it compact and operational rather than marketing
   oriented.
-

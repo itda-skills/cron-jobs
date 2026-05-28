@@ -1,0 +1,4 @@
+/cron-jobs
+data/
+tmp/
+*.log
