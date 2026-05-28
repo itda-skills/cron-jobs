@@ -41,7 +41,6 @@ func NewService(settings Settings) *Service {
 	paths := config.Paths{
 		DataDir:   settings.DataDir,
 		ScriptDir: settings.ScriptDir,
-		RecipeDir: settings.RecipeDir,
 	}
 	store := logstore.Store{Dir: settings.LogDir}
 	return &Service{
@@ -149,6 +148,7 @@ func (s *Service) RunJobNow(ctx context.Context, id string) (logstore.Entry, err
 		Name:         planned.Name,
 		ScheduleType: planned.ScheduleType,
 		ScheduledAt:  time.Now(),
+		RunReason:    runner.RunReasonManual,
 		Runtime:      planned.Runtime,
 		Env:          planned.Env,
 	})
@@ -164,6 +164,7 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) {
 				Name:         job.Name,
 				ScheduleType: job.ScheduleType,
 				ScheduledAt:  job.NextRun,
+				RunReason:    runner.RunReasonScheduled,
 				Runtime:      job.Runtime,
 				Env:          job.Env,
 			})

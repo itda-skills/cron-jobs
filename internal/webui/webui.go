@@ -31,7 +31,6 @@ type pageData struct {
 	FormJob     config.Job
 	FormAction  string
 	Error       string
-	RecipeIDs   []string
 	WeekdayList []weekdayOption
 }
 
@@ -201,17 +200,11 @@ func (s Server) runLog(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) data(title string, cfg config.Config, errText string) pageData {
 	configJSON, _ := json.MarshalIndent(cfg, "", "  ")
-	recipeIDs := make([]string, 0, len(cfg.Recipes))
-	for _, recipe := range cfg.Recipes {
-		recipeIDs = append(recipeIDs, recipe.ID)
-	}
-	sort.Strings(recipeIDs)
 	return pageData{
 		Title:      title,
 		Config:     cfg,
 		ConfigJSON: string(configJSON),
 		Error:      errText,
-		RecipeIDs:  recipeIDs,
 	}
 }
 
@@ -252,7 +245,6 @@ func parseJobForm(r *http.Request, existingID string) (config.Job, error) {
 		Runtime: jobruntime.Config{
 			Language:       jobruntime.LanguageBash,
 			Script:         strings.TrimSpace(r.FormValue("script")),
-			Recipes:        r.Form["recipes"],
 			TimeoutSeconds: timeout,
 		},
 		Schedule: schedule.Spec{
@@ -323,15 +315,6 @@ func weekdays(selected []string) []weekdayOption {
 	return values
 }
 
-func selected(values []string, value string) bool {
-	for _, current := range values {
-		if current == value {
-			return true
-		}
-	}
-	return false
-}
-
 func envPlainText(values map[string]string) string {
 	if len(values) == 0 {
 		return ""
@@ -350,7 +333,6 @@ func envPlainText(values map[string]string) string {
 
 var templates = template.Must(template.New("webui").Funcs(template.FuncMap{
 	"join":         strings.Join,
-	"selected":     selected,
 	"envPlainText": envPlainText,
 }).Parse(layoutTemplate + dashboardTemplate + jobFormTemplate + runLogTemplate))
 
@@ -520,16 +502,6 @@ const jobFormTemplate = `
       <div>
         <label>Timeout Seconds</label>
         <input name="timeout_seconds" value="{{.FormJob.Runtime.TimeoutSeconds}}">
-      </div>
-      <div class="wide">
-        <label>Recipes</label>
-        <div class="checks">
-          {{range .RecipeIDs}}
-            <label><input type="checkbox" name="recipes" value="{{.}}" {{if selected $.FormJob.Runtime.Recipes .}}checked{{end}}> {{.}}</label>
-          {{else}}
-            <span class="muted">No recipes configured. Add recipes in raw config.</span>
-          {{end}}
-        </div>
       </div>
       <div class="wide">
         <label>Plain Env</label>

@@ -28,7 +28,6 @@ func TestRunDueExecutesJobAndAdvancesNextRun(t *testing.T) {
 		ConfigPath: filepath.Join(dataDir, "config.json"),
 		LogDir:     filepath.Join(dataDir, "logs"),
 		ScriptDir:  scriptDir,
-		RecipeDir:  filepath.Join(dataDir, "recipes"),
 		Timezone:   "Asia/Seoul",
 	}
 	service := NewService(settings)

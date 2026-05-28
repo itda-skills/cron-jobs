@@ -16,7 +16,6 @@ type Settings struct {
 	ConfigPath string
 	LogDir     string
 	ScriptDir  string
-	RecipeDir  string
 	Timezone   string
 }
 
@@ -29,7 +28,6 @@ func LoadSettingsFromEnv() Settings {
 		ConfigPath: envDefault("APP_CONFIG_PATH", filepath.Join(dataDir, "config.json")),
 		LogDir:     envDefault("APP_LOG_DIR", filepath.Join(dataDir, "logs")),
 		ScriptDir:  envDefault("APP_SCRIPT_DIR", filepath.Join(dataDir, "scripts", "jobs")),
-		RecipeDir:  envDefault("APP_RECIPE_DIR", filepath.Join(dataDir, "recipes")),
 		Timezone:   envDefault("APP_TIMEZONE", "Asia/Seoul"),
 	}
 }
@@ -49,9 +47,6 @@ func (s Settings) Validate() error {
 	}
 	if strings.TrimSpace(s.ScriptDir) == "" {
 		return errors.New("APP_SCRIPT_DIR is required")
-	}
-	if strings.TrimSpace(s.RecipeDir) == "" {
-		return errors.New("APP_RECIPE_DIR is required")
 	}
 	if strings.TrimSpace(s.Timezone) == "" {
 		return errors.New("APP_TIMEZONE is required")

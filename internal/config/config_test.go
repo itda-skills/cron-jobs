@@ -67,7 +67,6 @@ func validConfig(t *testing.T) (Config, Paths) {
 	paths := Paths{
 		DataDir:   dataDir,
 		ScriptDir: filepath.Join(dataDir, "scripts", "jobs"),
-		RecipeDir: filepath.Join(dataDir, "recipes"),
 	}
 	cfg := Config{
 		Version:  1,
@@ -78,11 +77,6 @@ func validConfig(t *testing.T) (Config, Paths) {
 				Inherit: []string{"GITHUB_PAT"},
 			},
 		},
-		Recipes: []jobruntime.Recipe{{
-			ID:       "github-actions",
-			Language: jobruntime.LanguageBash,
-			Path:     "recipes/bash/github-actions.sh",
-		}},
 		Jobs: []Job{{
 			ID:      "weekday_report",
 			Name:    "Weekday report",
@@ -97,7 +91,6 @@ func validConfig(t *testing.T) (Config, Paths) {
 			Runtime: jobruntime.Config{
 				Language:       jobruntime.LanguageBash,
 				Script:         "scripts/jobs/weekday-report.sh",
-				Recipes:        []string{"github-actions"},
 				TimeoutSeconds: 60,
 			},
 			Schedule: schedule.Spec{

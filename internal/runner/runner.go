@@ -14,6 +14,12 @@ import (
 	"github.com/itda-skills/cron-jobs/internal/logstore"
 )
 
+const (
+	RunReasonScheduled = "scheduled"
+	RunReasonManual    = "manual"
+	RunReasonTest      = "test"
+)
+
 type Runner struct {
 	Store       logstore.Store
 	ConfigPath  string
@@ -25,6 +31,7 @@ type Job struct {
 	Name         string
 	ScheduleType string
 	ScheduledAt  time.Time
+	RunReason    string
 	Runtime      jobruntime.Resolved
 	Env          map[string]string
 }
@@ -120,6 +127,14 @@ func (r Runner) createWorkDir(runID string) (string, func(), error) {
 }
 
 func (r Runner) buildEnv(job Job, workDir string) []string {
+	runReason := job.RunReason
+	if runReason == "" {
+		runReason = RunReasonScheduled
+	}
+	testRun := "false"
+	if runReason == RunReasonTest {
+		testRun = "true"
+	}
 	env := map[string]string{
 		"PATH":              "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"HOME":              workDir,
@@ -131,6 +146,8 @@ func (r Runner) buildEnv(job Job, workDir string) []string {
 		"JOB_CONFIG_PATH":   r.ConfigPath,
 		"JOB_LOG_DIR":       r.Store.Dir,
 		"JOB_SCRIPT_PATH":   job.Runtime.Script,
+		"JOB_RUN_REASON":    runReason,
+		"JOB_TEST_RUN":      testRun,
 	}
 	for name, value := range job.Env {
 		env[name] = value
@@ -156,11 +173,6 @@ func writeBashWrapper(workDir string, runtime jobruntime.Resolved) (string, erro
 
 	if _, err := file.WriteString("#!/usr/bin/env bash\nset -euo pipefail\n"); err != nil {
 		return "", err
-	}
-	for _, recipe := range runtime.Recipes {
-		if _, err := fmt.Fprintf(file, "source %q\n", recipe.Path); err != nil {
-			return "", err
-		}
 	}
 	if _, err := file.WriteString("source \"$JOB_SCRIPT_PATH\"\n"); err != nil {
 		return "", err

@@ -31,7 +31,6 @@ func BuildPlan(cfg config.Config, paths config.Paths, now time.Time, lookup func
 	runtimePaths := jobruntime.Paths{
 		DataDir:   paths.DataDir,
 		ScriptDir: paths.ScriptDir,
-		RecipeDir: paths.RecipeDir,
 	}
 
 	planned := make([]PlannedJob, 0, len(cfg.Jobs))
@@ -43,7 +42,7 @@ func BuildPlan(cfg config.Config, paths config.Paths, now time.Time, lookup func
 		if err != nil {
 			return nil, fmt.Errorf("job %q env: %w", job.ID, err)
 		}
-		resolved, err := jobruntime.Resolve(job.Runtime, cfg.Recipes, runtimePaths)
+		resolved, err := jobruntime.Resolve(job.Runtime, runtimePaths)
 		if err != nil {
 			return nil, fmt.Errorf("job %q runtime: %w", job.ID, err)
 		}

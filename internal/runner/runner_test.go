@@ -12,22 +12,14 @@ import (
 	"github.com/itda-skills/cron-jobs/internal/logstore"
 )
 
-func TestRunBashJobWithRecipeAndConstrainedEnv(t *testing.T) {
+func TestRunBashJobWithConstrainedEnv(t *testing.T) {
 	dataDir := t.TempDir()
 	scriptDir := filepath.Join(dataDir, "scripts", "jobs")
-	recipeDir := filepath.Join(dataDir, "recipes", "bash")
 	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(recipeDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	scriptPath := filepath.Join(scriptDir, "job.sh")
-	recipePath := filepath.Join(recipeDir, "helper.sh")
-	if err := os.WriteFile(recipePath, []byte("helper_message() { echo recipe:$OWNER; }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(scriptPath, []byte("helper_message\necho job:$JOB_ID\necho secret:$GITHUB_PAT\n"), 0o644); err != nil {
+	if err := os.WriteFile(scriptPath, []byte("echo job:$JOB_ID\necho secret:$GITHUB_PAT\necho reason:$JOB_RUN_REASON\necho test:$JOB_TEST_RUN\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -38,14 +30,13 @@ func TestRunBashJobWithRecipeAndConstrainedEnv(t *testing.T) {
 		Name:         "Weekday report",
 		ScheduleType: "weekly",
 		ScheduledAt:  time.Date(2026, 5, 28, 18, 10, 0, 0, time.UTC),
+		RunReason:    RunReasonManual,
 		Runtime: jobruntime.Resolved{
 			Language: jobruntime.LanguageBash,
 			Script:   scriptPath,
-			Recipes:  []jobruntime.ResolvedRecipe{{ID: "helper", Path: recipePath}},
 			Timeout:  time.Second,
 		},
 		Env: map[string]string{
-			"OWNER":      "itda-skills",
 			"GITHUB_PAT": "test-token",
 		},
 	})
@@ -60,7 +51,7 @@ func TestRunBashJobWithRecipeAndConstrainedEnv(t *testing.T) {
 		t.Fatalf("ReadLog() error = %v", err)
 	}
 	log := string(data)
-	for _, want := range []string{"recipe:itda-skills", "job:weekday-report", "secret:test-token"} {
+	for _, want := range []string{"job:weekday-report", "secret:test-token", "reason:manual", "test:false"} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("log %q does not contain %q", log, want)
 		}
@@ -83,6 +74,7 @@ func TestRunTimesOut(t *testing.T) {
 		ID:          "slow",
 		Name:        "Slow",
 		ScheduledAt: time.Date(2026, 5, 28, 18, 10, 0, 0, time.UTC),
+		RunReason:   RunReasonManual,
 		Runtime: jobruntime.Resolved{
 			Language: jobruntime.LanguageBash,
 			Script:   scriptPath,

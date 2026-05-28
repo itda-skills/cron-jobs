@@ -17,11 +17,10 @@ import (
 var jobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 type Config struct {
-	Version  int                 `json:"version"`
-	Timezone string              `json:"timezone"`
-	Env      EnvSection          `json:"env,omitempty"`
-	Recipes  []jobruntime.Recipe `json:"recipes,omitempty"`
-	Jobs     []Job               `json:"jobs"`
+	Version  int        `json:"version"`
+	Timezone string     `json:"timezone"`
+	Env      EnvSection `json:"env,omitempty"`
+	Jobs     []Job      `json:"jobs"`
 }
 
 type EnvSection struct {
@@ -40,7 +39,6 @@ type Job struct {
 type Paths struct {
 	DataDir   string
 	ScriptDir string
-	RecipeDir string
 }
 
 func Load(path string) (Config, error) {
@@ -104,23 +102,6 @@ func (c Config) Validate(paths Paths) error {
 	runtimePaths := jobruntime.Paths{
 		DataDir:   paths.DataDir,
 		ScriptDir: paths.ScriptDir,
-		RecipeDir: paths.RecipeDir,
-	}
-	recipeIDs := map[string]struct{}{}
-	for _, recipe := range c.Recipes {
-		if recipe.ID == "" {
-			return errors.New("recipe id is required")
-		}
-		if _, ok := recipeIDs[recipe.ID]; ok {
-			return fmt.Errorf("duplicate recipe id %q", recipe.ID)
-		}
-		recipeIDs[recipe.ID] = struct{}{}
-		if err := jobruntime.ValidateLanguage(recipe.Language); err != nil {
-			return fmt.Errorf("recipe %q: %w", recipe.ID, err)
-		}
-		if _, err := jobruntime.ResolveUnder(paths.DataDir, paths.RecipeDir, recipe.Path); err != nil {
-			return fmt.Errorf("recipe %q has invalid path: %w", recipe.ID, err)
-		}
 	}
 
 	jobIDs := map[string]struct{}{}
@@ -141,7 +122,7 @@ func (c Config) Validate(paths Paths) error {
 		if err := jobenv.Validate("job "+job.ID, job.Env); err != nil {
 			return err
 		}
-		if _, err := jobruntime.Resolve(job.Runtime, c.Recipes, runtimePaths); err != nil {
+		if _, err := jobruntime.Resolve(job.Runtime, runtimePaths); err != nil {
 			return fmt.Errorf("job %q runtime: %w", job.ID, err)
 		}
 		if err := schedule.Validate(job.Schedule); err != nil {
